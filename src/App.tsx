@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { EditorView, basicSetup } from 'codemirror'
-import { EditorState } from '@codemirror/state'
+import { EditorState, Compartment } from '@codemirror/state'
 import { mermaid } from 'codemirror-lang-mermaid'
 import { autocompletion, CompletionContext, CompletionResult } from '@codemirror/autocomplete'
 import { keymap } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
+import { syntaxHighlighting, HighlightStyle } from '@codemirror/language'
+import { tags } from '@lezer/highlight'
 import { renderMermaid, THEMES } from 'beautiful-mermaid'
 import { open, save, ask } from '@tauri-apps/plugin-dialog'
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs'
@@ -32,6 +34,12 @@ import {
 } from "@/components/ui/select"
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { Separator } from '@/components/ui/separator'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { demos } from './demos'
 
 interface ThemeColors {
@@ -71,11 +79,133 @@ const themeMap: Record<string, ThemeColors> = {
   monokai: THEMES['monokai'],
 }
 
+function getThemeColors(themeName: string): ThemeColors {
+  return themeMap[themeName] || themeMap.default
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
+function lightenColor(hex: string, amount: number): string {
+  const r = Math.min(255, parseInt(hex.slice(1, 3), 16) + amount)
+  const g = Math.min(255, parseInt(hex.slice(3, 5), 16) + amount)
+  const b = Math.min(255, parseInt(hex.slice(5, 7), 16) + amount)
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
+}
+
+function darkenColor(hex: string, amount: number): string {
+  const r = Math.max(0, parseInt(hex.slice(1, 3), 16) - amount)
+  const g = Math.max(0, parseInt(hex.slice(3, 5), 16) - amount)
+  const b = Math.max(0, parseInt(hex.slice(5, 7), 16) - amount)
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
+}
+
+function getEditorTheme(themeName: string) {
+  const colors = getThemeColors(themeName)
+  const isDark = colors.bg === '#1e1e1e' || parseInt(colors.bg.slice(1, 3), 16) < 128
+  
+  return EditorView.theme({
+    '&': {
+      height: '100%',
+      backgroundColor: colors.bg,
+      color: colors.fg,
+    },
+    '.cm-scroller': {
+      overflow: 'auto',
+    },
+    '.cm-content': {
+      fontFamily: 'monospace',
+      fontSize: '14px',
+      minHeight: '100%',
+    },
+    '.cm-gutters': {
+      backgroundColor: isDark ? darkenColor(colors.bg, 10) : lightenColor(colors.bg, 5),
+      color: colors.muted || colors.fg,
+      border: 'none',
+    },
+    '.cm-activeLineGutter': {
+      backgroundColor: isDark ? darkenColor(colors.bg, 20) : lightenColor(colors.bg, 10),
+      color: colors.accent || colors.fg,
+    },
+    '.cm-lineNumbers .cm-gutterElement': {
+      padding: '0 8px 0 4px',
+      minWidth: '20px',
+      textAlign: 'right',
+    },
+    '.cm-cursor': {
+      borderLeftColor: colors.accent || colors.fg,
+    },
+    '.cm-selectionBackground': {
+      background: colors.surface ? hexToRgba(colors.surface, 0.3) : hexToRgba(colors.accent || colors.fg, 0.2),
+    },
+    '.cm-focused .cm-selectionBackground': {
+      background: colors.surface ? hexToRgba(colors.surface, 0.4) : hexToRgba(colors.accent || colors.fg, 0.3),
+    },
+    '.cm-activeLine': {
+      backgroundColor: isDark ? darkenColor(colors.bg, 15) : lightenColor(colors.bg, 8),
+    },
+    '.cm-matchingBracket': {
+      backgroundColor: colors.accent ? hexToRgba(colors.accent, 0.3) : hexToRgba(colors.fg, 0.2),
+      color: colors.accent || colors.fg,
+      fontWeight: 'bold',
+    },
+    '.cm-nonmatchingBracket': {
+      color: isDark ? '#ff6b6b' : '#e74c3c',
+    },
+    '.cm-searchMatch': {
+      backgroundColor: colors.accent ? hexToRgba(colors.accent, 0.4) : hexToRgba(colors.fg, 0.3),
+    },
+    '.cm-searchMatch.cm-searchMatch-selected': {
+      backgroundColor: colors.accent ? hexToRgba(colors.accent, 0.6) : hexToRgba(colors.fg, 0.5),
+    },
+  }, { dark: isDark })
+}
+
+function getHighlightStyle(themeName: string) {
+  const colors = getThemeColors(themeName)
+  const isDark = colors.bg === '#1e1e1e' || parseInt(colors.bg.slice(1, 3), 16) < 128
+  
+  const highlightStyles = {
+    keyword: { color: isDark ? '#c678dd' : '#6f42c1', fontWeight: '500' },
+    operator: { color: isDark ? '#56b6c2' : '#17a2b8' },
+    propertyName: { color: isDark ? '#98c379' : '#28a745' },
+    string: { color: isDark ? '#98c379' : '#28a745' },
+    number: { color: isDark ? '#d19a66' : '#fd7e14' },
+    comment: { color: isDark ? '#5c6370' : '#6c757d', fontStyle: 'italic' },
+    variableName: { color: isDark ? '#e06c75' : '#d63384' },
+    typeName: { color: isDark ? '#e5c07b' : '#fd7e14' },
+    function: { color: isDark ? '#61afef' : '#007bff' },
+    content: { color: isDark ? '#e06c75' : '#d63384' },
+    modifier: { color: isDark ? '#c678dd' : '#6f42c1' },
+  }
+  
+  return HighlightStyle.define([
+    { tag: tags.keyword, ...highlightStyles.keyword },
+    { tag: tags.operator, ...highlightStyles.operator },
+    { tag: tags.propertyName, ...highlightStyles.propertyName },
+    { tag: tags.string, ...highlightStyles.string },
+    { tag: tags.number, ...highlightStyles.number },
+    { tag: tags.comment, ...highlightStyles.comment },
+    { tag: tags.variableName, ...highlightStyles.variableName },
+    { tag: tags.typeName, ...highlightStyles.typeName },
+    { tag: tags.function(tags.variableName), ...highlightStyles.function },
+    { tag: tags.content, ...highlightStyles.content },
+    { tag: tags.modifier, ...highlightStyles.modifier },
+  ])
+}
+
 function App() {
-  const [state, setState] = useState<AppState>({
-    currentFile: null,
-    isDirty: false,
-    currentTheme: 'default',
+  const [state, setState] = useState<AppState>(() => {
+    const savedTheme = localStorage.getItem('mermaid-editor-theme')
+    return {
+      currentFile: null,
+      isDirty: false,
+      currentTheme: savedTheme || 'default',
+    }
   })
   const [status, setStatus] = useState('Ready')
   const [isError, setIsError] = useState(false)
@@ -87,10 +217,9 @@ function App() {
   
   const editorViewRef = useRef<EditorView | null>(null)
   const renderTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const getThemeColors = (themeName: string): ThemeColors => {
-    return themeMap[themeName] || themeMap.default
-  }
+  const themeCompartmentRef = useRef(new Compartment())
+  const updateListenerCompartmentRef = useRef(new Compartment())
+  const highlightCompartmentRef = useRef(new Compartment())
 
   const mermaidCompletions = (context: CompletionContext): CompletionResult | null => {
     const word = context.matchBefore(/\w*/)
@@ -171,7 +300,7 @@ function App() {
   const renderDiagram = useCallback(async () => {
     const editorView = editorViewRef.current
     if (!editorView) return
-    
+
     const code = editorView.state.doc.toString()
     const theme = getThemeColors(state.currentTheme)
 
@@ -216,17 +345,16 @@ function App() {
         autocompletion({ override: [mermaidCompletions] }),
         keymap.of([...defaultKeymap, ...historyKeymap]),
         history(),
-        EditorView.updateListener.of((update) => {
-          if (update.docChanged) {
-            setState(prev => ({ ...prev, isDirty: true }))
-            debouncedRender()
-          }
-        }),
-        EditorView.theme({
-          '&': { height: '100%' },
-          '.cm-scroller': { overflow: 'auto' },
-          '.cm-content': { fontFamily: 'monospace', fontSize: '14px' },
-        }),
+        updateListenerCompartmentRef.current.of(
+          EditorView.updateListener.of((update) => {
+            if (update.docChanged) {
+              setState(prev => ({ ...prev, isDirty: true }))
+              debouncedRender()
+            }
+          })
+        ),
+        themeCompartmentRef.current.of(getEditorTheme(state.currentTheme)),
+        highlightCompartmentRef.current.of(syntaxHighlighting(getHighlightStyle(state.currentTheme))),
       ],
     })
 
@@ -248,6 +376,35 @@ function App() {
   useEffect(() => {
     renderDiagram()
   }, [state.currentTheme, renderDiagram])
+
+  useEffect(() => {
+    const editorView = editorViewRef.current
+    if (editorView) {
+      editorView.dispatch({
+        effects: [
+          themeCompartmentRef.current.reconfigure(getEditorTheme(state.currentTheme)),
+          highlightCompartmentRef.current.reconfigure(syntaxHighlighting(getHighlightStyle(state.currentTheme))),
+        ],
+      })
+    }
+    localStorage.setItem('mermaid-editor-theme', state.currentTheme)
+  }, [state.currentTheme])
+
+  useEffect(() => {
+    const editorView = editorViewRef.current
+    if (editorView) {
+      editorView.dispatch({
+        effects: updateListenerCompartmentRef.current.reconfigure(
+          EditorView.updateListener.of((update) => {
+            if (update.docChanged) {
+              setState(prev => ({ ...prev, isDirty: true }))
+              debouncedRender()
+            }
+          })
+        ),
+      })
+    }
+  }, [debouncedRender])
 
   useEffect(() => {
     const args = (window as { __CLI_ARGS__?: { file?: string; theme?: string } }).__CLI_ARGS__
@@ -365,7 +522,44 @@ function App() {
     }
   }
 
-  const handleExport = () => {
+  const svgToPng = (svgEl: SVGSVGElement): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        reject(new Error('Failed to get canvas context'))
+        return
+      }
+
+      const svgData = new XMLSerializer().serializeToString(svgEl)
+      const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' })
+      const url = URL.createObjectURL(svgBlob)
+
+      const img = new Image()
+      img.onload = () => {
+        canvas.width = img.width * 2
+        canvas.height = img.height * 2
+        ctx.scale(2, 2)
+        ctx.drawImage(img, 0, 0)
+        URL.revokeObjectURL(url)
+        
+        canvas.toBlob((blob) => {
+          if (blob) {
+            resolve(blob)
+          } else {
+            reject(new Error('Failed to create PNG blob'))
+          }
+        }, 'image/png')
+      }
+      img.onerror = () => {
+        URL.revokeObjectURL(url)
+        reject(new Error('Failed to load SVG'))
+      }
+      img.src = url
+    })
+  }
+
+  const handleExport = (format: 'svg' | 'png') => {
     const previewEl = document.getElementById('preview')
     const svgEl = previewEl?.querySelector('svg')
     if (!svgEl) {
@@ -374,17 +568,34 @@ function App() {
       return
     }
 
-    const svgData = new XMLSerializer().serializeToString(svgEl)
-    const blob = new Blob([svgData], { type: 'image/svg+xml' })
-    const url = URL.createObjectURL(blob)
+    if (format === 'svg') {
+      const svgData = new XMLSerializer().serializeToString(svgEl)
+      const blob = new Blob([svgData], { type: 'image/svg+xml' })
+      const url = URL.createObjectURL(blob)
 
-    const link = document.createElement('a')
-    link.href = url
-    link.download = 'diagram.svg'
-    link.click()
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'diagram.svg'
+      link.click()
 
-    URL.revokeObjectURL(url)
-    setStatus('Exported SVG')
+      URL.revokeObjectURL(url)
+      setStatus('Exported SVG')
+    } else {
+      svgToPng(svgEl)
+        .then((blob) => {
+          const url = URL.createObjectURL(blob)
+          const link = document.createElement('a')
+          link.href = url
+          link.download = 'diagram.png'
+          link.click()
+          URL.revokeObjectURL(url)
+          setStatus('Exported PNG')
+        })
+        .catch((error) => {
+          setStatus(`Export failed: ${error instanceof Error ? error.message : String(error)}`)
+          setIsError(true)
+        })
+    }
     setIsError(false)
   }
 
@@ -429,9 +640,27 @@ function App() {
 
   return (
     <TooltipProvider>
-      <div className="flex flex-col h-screen bg-background overflow-hidden">
+      <div 
+        className="flex flex-col h-screen overflow-hidden"
+        style={{ 
+          backgroundColor: getThemeColors(state.currentTheme).bg,
+          color: getThemeColors(state.currentTheme).fg,
+        }}
+      >
         {/* Toolbar */}
-        <div className="flex items-center justify-between px-4 py-2 border-b bg-card flex-shrink-0">
+        <div 
+          className="flex items-center justify-between px-4 py-2 border-b flex-shrink-0"
+          style={{
+            backgroundColor: getThemeColors(state.currentTheme).surface 
+              ? hexToRgba(getThemeColors(state.currentTheme).surface!, 0.1)
+              : (parseInt(getThemeColors(state.currentTheme).bg.slice(1, 3), 16) < 128
+                  ? lightenColor(getThemeColors(state.currentTheme).bg, 8)
+                  : darkenColor(getThemeColors(state.currentTheme).bg, 5)),
+            borderColor: getThemeColors(state.currentTheme).border 
+              ? hexToRgba(getThemeColors(state.currentTheme).border!, 0.3)
+              : hexToRgba(getThemeColors(state.currentTheme).fg, 0.2),
+          }}
+        >
           <div className="flex items-center gap-2">
             <Tooltip>
               <TooltipTrigger asChild>
@@ -465,15 +694,22 @@ function App() {
 
             <Separator orientation="vertical" className="h-6" />
 
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="sm" onClick={handleExport}>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="focus-visible:ring-0 focus-visible:outline-none">
                   <Download className="w-4 h-4 mr-2" />
                   Export
                 </Button>
-              </TooltipTrigger>
-              <TooltipContent>Export as SVG</TooltipContent>
-            </Tooltip>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem onClick={() => handleExport('svg')}>
+                  Export as SVG
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleExport('png')}>
+                  Export as PNG
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             <Select onValueChange={handleLoadDemo}>
               <SelectTrigger className="w-36">
@@ -517,8 +753,28 @@ function App() {
         {/* Main Content */}
         <div className="flex flex-1 overflow-hidden">
           {/* Editor */}
-          <div className="w-1/2 border-r flex flex-col">
-            <div className="px-3 py-2 text-sm font-medium text-muted-foreground bg-muted/50 flex items-center gap-2">
+          <div 
+            className="w-1/2 flex flex-col border-r"
+            style={{
+              borderColor: getThemeColors(state.currentTheme).border
+                ? hexToRgba(getThemeColors(state.currentTheme).border!, 0.3)
+                : hexToRgba(getThemeColors(state.currentTheme).fg, 0.2),
+            }}
+          >
+            <div 
+              className="px-3 py-2 text-sm font-medium flex items-center gap-2 h-10"
+              style={{
+                backgroundColor: getThemeColors(state.currentTheme).surface
+                  ? hexToRgba(getThemeColors(state.currentTheme).surface!, 0.05)
+                  : (parseInt(getThemeColors(state.currentTheme).bg.slice(1, 3), 16) < 128
+                      ? lightenColor(getThemeColors(state.currentTheme).bg, 5)
+                      : darkenColor(getThemeColors(state.currentTheme).bg, 3)),
+                color: getThemeColors(state.currentTheme).muted || getThemeColors(state.currentTheme).fg,
+                borderColor: getThemeColors(state.currentTheme).border
+                  ? hexToRgba(getThemeColors(state.currentTheme).border!, 0.2)
+                  : hexToRgba(getThemeColors(state.currentTheme).fg, 0.15),
+              }}
+            >
               <FileCode className="w-4 h-4" />
               Editor
             </div>
@@ -527,7 +783,20 @@ function App() {
 
           {/* Preview */}
           <div className="w-1/2 flex flex-col">
-            <div className="px-3 py-2 text-sm font-medium text-muted-foreground bg-muted/50 flex items-center justify-between">
+            <div 
+              className="px-3 py-2 text-sm font-medium flex items-center justify-between h-10"
+              style={{
+                backgroundColor: getThemeColors(state.currentTheme).surface
+                  ? hexToRgba(getThemeColors(state.currentTheme).surface!, 0.05)
+                  : (parseInt(getThemeColors(state.currentTheme).bg.slice(1, 3), 16) < 128
+                      ? lightenColor(getThemeColors(state.currentTheme).bg, 5)
+                      : darkenColor(getThemeColors(state.currentTheme).bg, 3)),
+                color: getThemeColors(state.currentTheme).muted || getThemeColors(state.currentTheme).fg,
+                borderColor: getThemeColors(state.currentTheme).border
+                  ? hexToRgba(getThemeColors(state.currentTheme).border!, 0.2)
+                  : hexToRgba(getThemeColors(state.currentTheme).fg, 0.15),
+              }}
+            >
               <div className="flex items-center gap-2">
                 <Palette className="w-4 h-4" />
                 Preview
@@ -594,7 +863,19 @@ function App() {
         </div>
 
         {/* Status Bar */}
-        <div className="flex items-center justify-between px-4 py-1.5 border-t bg-card text-sm">
+        <div 
+          className="flex items-center justify-between px-4 py-1.5 border-t text-sm"
+          style={{
+            backgroundColor: getThemeColors(state.currentTheme).surface
+              ? hexToRgba(getThemeColors(state.currentTheme).surface!, 0.1)
+              : (parseInt(getThemeColors(state.currentTheme).bg.slice(1, 3), 16) < 128
+                  ? lightenColor(getThemeColors(state.currentTheme).bg, 8)
+                  : darkenColor(getThemeColors(state.currentTheme).bg, 5)),
+            borderColor: getThemeColors(state.currentTheme).border
+              ? hexToRgba(getThemeColors(state.currentTheme).border!, 0.3)
+              : hexToRgba(getThemeColors(state.currentTheme).fg, 0.2),
+          }}
+        >
           <div className="flex items-center gap-2">
             {isError ? (
               <X className="w-4 h-4 text-red-500" />
@@ -605,7 +886,7 @@ function App() {
               {status}
             </span>
           </div>
-          <div className="text-muted-foreground">
+          <div style={{ color: getThemeColors(state.currentTheme).muted || getThemeColors(state.currentTheme).fg }}>
             Theme: {state.currentTheme}
           </div>
         </div>
