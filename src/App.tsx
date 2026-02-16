@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { EditorView, basicSetup } from 'codemirror'
 import { EditorState } from '@codemirror/state'
 import { mermaid } from 'codemirror-lang-mermaid'
+import { autocompletion, CompletionContext, CompletionResult } from '@codemirror/autocomplete'
 import { keymap } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { renderMermaid, THEMES } from 'beautiful-mermaid'
@@ -90,6 +91,82 @@ function App() {
     return themeMap[themeName] || themeMap.default
   }
 
+  const mermaidCompletions = (context: CompletionContext): CompletionResult | null => {
+    const word = context.matchBefore(/\w*/)
+    if (!word || (word.from === word.to && !context.explicit)) return null
+
+    const diagramTypes = [
+      { label: 'graph', type: 'keyword', detail: 'Directed graph', info: 'Create a directed graph' },
+      { label: 'flowchart', type: 'keyword', detail: 'Flowchart', info: 'Create a flowchart' },
+      { label: 'sequenceDiagram', type: 'keyword', detail: 'Sequence diagram', info: 'Create a sequence diagram' },
+      { label: 'sequence', type: 'keyword', detail: 'Sequence diagram', info: 'Create a sequence diagram' },
+      { label: 'classDiagram', type: 'keyword', detail: 'Class diagram', info: 'Create a class diagram' },
+      { label: 'class', type: 'keyword', detail: 'Class diagram', info: 'Create a class diagram' },
+      { label: 'stateDiagram-v2', type: 'keyword', detail: 'State diagram', info: 'Create a state diagram' },
+      { label: 'stateDiagram', type: 'keyword', detail: 'State diagram', info: 'Create a state diagram' },
+      { label: 'state', type: 'keyword', detail: 'State diagram', info: 'Create a state diagram' },
+      { label: 'erDiagram', type: 'keyword', detail: 'ER diagram', info: 'Create an ER diagram' },
+      { label: 'er', type: 'keyword', detail: 'ER diagram', info: 'Create an ER diagram' },
+      { label: 'gantt', type: 'keyword', detail: 'Gantt chart', info: 'Create a Gantt chart' },
+      { label: 'pie', type: 'keyword', detail: 'Pie chart', info: 'Create a pie chart' },
+      { label: 'mindmap', type: 'keyword', detail: 'Mind map', info: 'Create a mind map' },
+      { label: 'journey', type: 'keyword', detail: 'User journey', info: 'Create a user journey diagram' },
+      { label: 'gitGraph', type: 'keyword', detail: 'Git graph', info: 'Create a Git graph' },
+      { label: 'requirementDiagram', type: 'keyword', detail: 'Requirement diagram', info: 'Create a requirement diagram' },
+      { label: 'C4Context', type: 'keyword', detail: 'C4 diagram', info: 'Create a C4 diagram' },
+    ]
+
+    const graphKeywords = [
+      { label: 'TD', type: 'keyword', detail: 'Top-Down', info: 'Top-Down layout' },
+      { label: 'BT', type: 'keyword', detail: 'Bottom-Top', info: 'Bottom-Top layout' },
+      { label: 'LR', type: 'keyword', detail: 'Left-Right', info: 'Left-Right layout' },
+      { label: 'RL', type: 'keyword', detail: 'Right-Left', info: 'Right-Left layout' },
+      { label: 'subgraph', type: 'keyword', detail: 'Subgraph', info: 'Create a subgraph' },
+      { label: 'end', type: 'keyword', detail: 'End subgraph', info: 'End a subgraph' },
+      { label: 'style', type: 'function', detail: 'Style', info: 'Apply style to node' },
+      { label: 'linkStyle', type: 'function', detail: 'Link Style', info: 'Apply style to link' },
+      { label: 'classDef', type: 'function', detail: 'Class Definition', info: 'Define a class style' },
+      { label: 'class', type: 'keyword', detail: 'Class', info: 'Apply class to node' },
+      { label: 'direction', type: 'keyword', detail: 'Direction', info: 'Set graph direction' },
+    ]
+
+    const sequenceKeywords = [
+      { label: 'participant', type: 'keyword', detail: 'Participant', info: 'Define a participant' },
+      { label: 'actor', type: 'keyword', detail: 'Actor', info: 'Define an actor' },
+      { label: 'loop', type: 'keyword', detail: 'Loop', info: 'Loop section' },
+      { label: 'alt', type: 'keyword', detail: 'Alternative', info: 'Alternative paths' },
+      { label: 'else', type: 'keyword', detail: 'Else', info: 'Else branch' },
+      { label: 'opt', type: 'keyword', detail: 'Optional', info: 'Optional section' },
+      { label: 'par', type: 'keyword', detail: 'Parallel', info: 'Parallel section' },
+      { label: 'note', type: 'keyword', detail: 'Note', info: 'Add a note' },
+      { label: 'over', type: 'keyword', detail: 'Over', info: 'Note over participants' },
+      { label: 'title', type: 'keyword', detail: 'Title', info: 'Diagram title' },
+      { label: 'autonumber', type: 'keyword', detail: 'Autonumber', info: 'Enable auto numbering' },
+      { label: 'hide', type: 'keyword', detail: 'Hide', info: 'Hide sequence numbers' },
+    ]
+
+    const classKeywords = [
+      { label: 'class', type: 'keyword', detail: 'Class', info: 'Define a class' },
+      { label: 'interface', type: 'keyword', detail: 'Interface', info: 'Define an interface' },
+      { label: 'enum', type: 'keyword', detail: 'Enum', info: 'Define an enum' },
+      { label: 'extends', type: 'keyword', detail: 'Extends', info: 'Inheritance' },
+      { label: 'implements', type: 'keyword', detail: 'Implements', info: 'Implementation' },
+      { label: '--', type: 'operator', detail: 'Line', info: 'Connection line' },
+      { label: '..>', type: 'operator', detail: 'Dotted arrow', info: 'Dotted arrow' },
+      { label: '-->', type: 'operator', detail: 'Arrow', info: 'Arrow line' },
+      { label: '..|>', type: 'operator', detail: 'Dotted open', info: 'Dotted open arrow' },
+      { label: '|>', type: 'operator', detail: 'Open', info: 'Open arrow' },
+    ]
+
+    const allCompletions = [...diagramTypes, ...graphKeywords, ...sequenceKeywords, ...classKeywords]
+
+    return {
+      from: word.from,
+      options: allCompletions,
+      validFor: /^\w*$/,
+    }
+  }
+
   const renderDiagram = useCallback(async () => {
     const editorView = editorViewRef.current
     if (!editorView) return
@@ -135,6 +212,7 @@ function App() {
       extensions: [
         basicSetup,
         mermaid(),
+        autocompletion({ override: [mermaidCompletions] }),
         keymap.of([...defaultKeymap, ...historyKeymap]),
         history(),
         EditorView.updateListener.of((update) => {
