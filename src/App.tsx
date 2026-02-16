@@ -199,6 +199,7 @@ function getHighlightStyle(themeName: string) {
 }
 
 function App() {
+  const [isTauri, setIsTauri] = useState(false)
   const [state, setState] = useState<AppState>(() => {
     const savedTheme = localStorage.getItem('mermaid-editor-theme')
     return {
@@ -407,6 +408,14 @@ function App() {
   }, [debouncedRender])
 
   useEffect(() => {
+    // Detect if running in Tauri environment
+    const checkTauri = () => {
+      const isTauriApp = typeof window !== 'undefined' && '__TAURI__' in window
+      setIsTauri(isTauriApp)
+    }
+
+    checkTauri()
+
     const args = (window as { __CLI_ARGS__?: { file?: string; theme?: string } }).__CLI_ARGS__
     if (!args) return
 
@@ -642,9 +651,12 @@ function App() {
     <TooltipProvider>
       <div 
         className="flex flex-col h-screen overflow-hidden"
+        data-tauri-drag-region
         style={{ 
           backgroundColor: getThemeColors(state.currentTheme).bg,
           color: getThemeColors(state.currentTheme).fg,
+          paddingTop: isTauri ? '28px' : '0px',
+          paddingLeft: isTauri ? '80px' : '0px',
         }}
       >
         {/* Toolbar */}
