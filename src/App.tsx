@@ -655,8 +655,7 @@ function App() {
         style={{ 
           backgroundColor: getThemeColors(state.currentTheme).bg,
           color: getThemeColors(state.currentTheme).fg,
-          paddingTop: isTauri ? '28px' : '0px',
-          paddingLeft: isTauri ? '80px' : '0px',
+          paddingTop: isTauri ? '28px' : '0px'
         }}
       >
         {/* Toolbar */}
