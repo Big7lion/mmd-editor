@@ -30,5 +30,37 @@
   "bundle": {
     "active": true,
     "targets": "all"
+  },
+  "plugins": {
+    "cli": {
+      "description": "A beautiful Mermaid diagram editor",
+      "longDescription": "bmermaid is a desktop application for editing and previewing Mermaid diagrams with live preview, syntax highlighting, and multiple themes.",
+      "beforeHelp": "bmermaid - Beautiful Mermaid Editor",
+      "afterHelp": "Examples:\n  bmermaid diagram.mmd\n  bmermaid -t dark diagram.mmd\n  bmermaid --theme tokyo-night flowchart.mmd",
+      "args": [
+        {
+          "name": "file",
+          "index": 1,
+          "description": "Path to the Mermaid file to open",
+          "takesValue": true
+        },
+        {
+          "short": "t",
+          "name": "theme",
+          "description": "Theme name (default, dark, tokyo-night, dracula, github-dark, nord, one-dark, solarized-light, solarized-dark, monokai)",
+          "takesValue": true
+        },
+        {
+          "short": "v",
+          "name": "version",
+          "description": "Print version information"
+        },
+        {
+          "short": "h",
+          "name": "help",
+          "description": "Print help information"
+        }
+      ]
+    }
   }
 }

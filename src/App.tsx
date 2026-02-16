@@ -248,6 +248,31 @@ function App() {
     renderDiagram()
   }, [state.currentTheme, renderDiagram])
 
+  useEffect(() => {
+    const args = (window as { __CLI_ARGS__?: { file?: string; theme?: string } }).__CLI_ARGS__
+    if (!args) return
+
+    if (args.theme) {
+      const validThemes = ['default', 'dark', 'tokyo-night', 'dracula', 'github-dark', 'nord', 'one-dark', 'solarized-light', 'solarized-dark', 'monokai']
+      if (validThemes.includes(args.theme)) {
+        setState(prev => ({ ...prev, currentTheme: args.theme! }))
+      }
+    }
+
+    if (args.file) {
+      readTextFile(args.file)
+        .then((content: string) => {
+          setCode(content)
+          setState(prev => ({ ...prev, currentFile: args.file!, isDirty: false }))
+          setStatus(`Opened: ${args.file}`)
+        })
+        .catch((error: Error) => {
+          setStatus(`Failed to open: ${error.message}`)
+          setIsError(true)
+        })
+    }
+  }, [])
+
   const getCode = () => editorViewRef.current?.state.doc.toString() || ''
 
   const setCode = (code: string) => {
