@@ -6,8 +6,9 @@ import { autocompletion, CompletionContext, CompletionResult } from '@codemirror
 import { keymap } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { renderMermaid, THEMES } from 'beautiful-mermaid'
-import { open, save } from '@tauri-apps/plugin-dialog'
+import { open, save, ask } from '@tauri-apps/plugin-dialog'
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs'
+import { readText } from '@tauri-apps/plugin-clipboard-manager'
 import { 
   FilePlus, 
   FolderOpen, 
@@ -271,6 +272,39 @@ function App() {
           setIsError(true)
         })
     }
+  }, [])
+
+  useEffect(() => {
+    const checkClipboard = async () => {
+      try {
+        const clipboardText = await readText()
+        if (!clipboardText || clipboardText.trim().length === 0) return
+
+        const trimmed = clipboardText.trim()
+        
+        const keywords = ['graph', 'flowchart', 'sequenceDiagram', 'classDiagram', 'stateDiagram', 'erDiagram', 'gantt', 'pie', 'mindmap', 'journey', 'gitGraph', 'requirementDiagram', 'C4Context']
+        const hasMermaidKeyword = keywords.some(kw => 
+          trimmed.toLowerCase().startsWith(kw.toLowerCase()) || 
+          trimmed.toLowerCase().includes(kw.toLowerCase() + ' ') ||
+          trimmed.toLowerCase().includes('\n' + kw.toLowerCase())
+        )
+
+        if (hasMermaidKeyword && trimmed.length > 5) {
+          const result = await ask(`Found Mermaid content in clipboard (${Math.min(trimmed.length, 50)} chars). Do you want to import it?`)
+          
+          if (result) {
+            setCode(trimmed)
+            setState(prev => ({ ...prev, isDirty: true }))
+            setStatus('Imported from clipboard')
+            setIsError(false)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to read clipboard:', error)
+      }
+    }
+
+    checkClipboard()
   }, [])
 
   const getCode = () => editorViewRef.current?.state.doc.toString() || ''
