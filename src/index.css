@@ -80,3 +80,13 @@ body {
   width: 100%;
   height: 100vh;
 }
+
+/* Tauri titlebar data attributes */
+[data-tauri-drag-region] {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+[data-tauri-drag-region]:active {
+  cursor: grabbing;
+}
