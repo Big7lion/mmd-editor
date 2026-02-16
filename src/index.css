@@ -60,8 +60,15 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-body {
+html, body {
   margin: 0;
+  padding: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: pan-x pan-y;
+}
+
+body {
   display: flex;
   min-width: 320px;
   min-height: 100vh;

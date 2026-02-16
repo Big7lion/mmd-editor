@@ -350,10 +350,11 @@ function App() {
   }
 
   const handleWheel = (e: React.WheelEvent) => {
+    e.stopPropagation()
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault()
       const delta = e.deltaY > 0 ? -10 : 10
-      setZoom(z => Math.min(200, Math.max(25, z + delta)))
+      setZoom(z => Math.min(500, Math.max(25, z + delta)))
     }
   }
 
@@ -364,9 +365,9 @@ function App() {
 
   return (
     <TooltipProvider>
-      <div className="flex flex-col h-screen bg-background">
+      <div className="flex flex-col h-screen bg-background overflow-hidden">
         {/* Toolbar */}
-        <div className="flex items-center justify-between px-4 py-2 border-b bg-card">
+        <div className="flex items-center justify-between px-4 py-2 border-b bg-card flex-shrink-0">
           <div className="flex items-center gap-2">
             <Tooltip>
               <TooltipTrigger asChild>
@@ -482,7 +483,7 @@ function App() {
                   variant="ghost" 
                   size="sm" 
                   className="h-7 px-2"
-                  onClick={() => setZoom(z => Math.min(200, z + 25))}
+                  onClick={() => setZoom(z => Math.min(500, z + 25))}
                   title="Zoom In"
                 >
                   <ZoomIn className="w-3 h-3" />
@@ -504,6 +505,8 @@ function App() {
               style={{ 
                 backgroundColor: getThemeColors(state.currentTheme).bg,
                 userSelect: 'none',
+                touchAction: 'none',
+                overscrollBehavior: 'none',
               }}
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
