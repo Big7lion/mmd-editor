@@ -300,11 +300,16 @@ function App() {
           }
         }
       } catch (error) {
-        console.error('Failed to read clipboard:', error)
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        console.error('Failed to read clipboard:', errorMessage)
       }
     }
 
-    checkClipboard()
+    const timer = setTimeout(() => {
+      checkClipboard()
+    }, 500)
+
+    return () => clearTimeout(timer)
   }, [])
 
   const getCode = () => editorViewRef.current?.state.doc.toString() || ''
