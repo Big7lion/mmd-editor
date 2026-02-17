@@ -490,8 +490,9 @@ function App() {
 
   const handleNew = () => {
     setCode(DEFAULT_CODE)
-    setState({ currentFile: null, isDirty: false, currentTheme: 'default' })
+    setState(prev => ({ currentFile: null, isDirty: false, currentTheme: prev.currentTheme }))
     setStatus('New file')
+    renderDiagram()
   }
 
   const handleOpen = async () => {
